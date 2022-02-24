@@ -1,0 +1,28 @@
+{
+  "server": {
+    "url": "",
+    "username": "",
+    "password": "",
+    "project": 43
+  },
+
+  "entity": {
+    "filename": "call_list.csv",
+    "key": "aspb",
+    "attached_to": [
+      "call_log",
+      "survey"
+    ],
+    "updated_by": [
+      {
+        "form_id": "call_log",
+        "fields": [
+          "status",
+          "calls_made",
+          "call_again",
+          "finished_survey"
+        ]
+      }
+    ]
+  }
+}
