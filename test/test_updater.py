@@ -80,23 +80,23 @@ def mocked_open(*args):
 
 @mock.patch("json.dump")
 @mock.patch("builtins.open")
-def test_cache_token__creates_file__when_no_file_exists(open_mock, json_mock):
+def test_write_to_cache__creates_file__when_no_file_exists(open_mock, json_mock):
     open_mock.side_effect = mocked_open
     open_mock.__enter__ = mock.Mock(return_value=(mock.Mock(), None))
     open_mock.__exit__ = mock.Mock(return_value=None)
-    write_to_cache("foo")
-    json_mock.assert_called_with({'token': 'foo'}, mock.ANY)
+    write_to_cache("foo", "bar")
+    json_mock.assert_called_with({'foo': 'bar'}, mock.ANY)
 
 
 @mock.patch("json.dump")
-@mock.patch("builtins.open", mock.mock_open(read_data='{"token": "foo"}'))
-def test_cache_token__replaces_token__when_file_with_token_exists(json_mock):
-    write_to_cache("bar")
-    json_mock.assert_called_with({'token': 'bar'}, mock.ANY)
+@mock.patch("builtins.open", mock.mock_open(read_data='{"foo": "foo"}'))
+def test_write_to_cache__replaces_token__when_file_with_token_exists(json_mock):
+    write_to_cache("foo", "bar")
+    json_mock.assert_called_with({'foo': 'bar'}, mock.ANY)
 
 
 @mock.patch("json.dump")
 @mock.patch("builtins.open", mock.mock_open(read_data='{"foo": "bar"}'))
-def test_cache_token__preserves_other_keys__when_file_with_other_keys_exists(json_mock):
-    write_to_cache("baz")
-    json_mock.assert_called_with({'token': 'baz', 'foo': 'bar'}, mock.ANY)
+def test_write_to_cache__preserves_other_keys__when_file_with_other_keys_exists(json_mock):
+    write_to_cache("bar", "baz")
+    json_mock.assert_called_with({'bar': 'baz', 'foo': 'bar'}, mock.ANY)

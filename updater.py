@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import sys
 from urllib.parse import quote_plus
 
 import requests
@@ -28,6 +29,7 @@ def get_verified_cached_token(server: dict) -> Optional[str]:
         with open('cache.json') as cache_file:
             cache = json.load(cache_file)
             token = cache["token"]
+            # TODO: request updates with cached token to remove this request
             user_details_response = requests.get(
                 f"{server['url']}/v1/users/current",
                 headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"}
@@ -87,7 +89,7 @@ def get_updates(updated_by: list, server: dict, token: str, last_update_timestam
         return None
 
     updates.rename(columns=lambda x: x.rsplit('/', 1)[-1], inplace=True)
-    # TODO: this will mean the latest update across any form submission. Probably those should be merged in some way. groupby merge?
+    # TODO: this will mean the latest update across any form submission. Consider merging updates. groupby merge?
     return updates.sort_values('submissionDate', ascending=False).drop_duplicates(subset=[key], keep='first')
 
 
@@ -122,26 +124,33 @@ def upload(server: dict, token: str, attached_to: list, csv: str, filename: str)
         requests.post(f"{draft}/publish?version={datetime.now().isoformat()}", headers={"Authorization": f"Bearer {token}"})
 
 
-config = get_config()
+def main() -> int:
+    config = get_config()
 
-token = get_token(config['server'])
-write_to_cache("token", token)
+    token = get_token(config['server'])
+    write_to_cache("token", token)
 
-last_update_timestamp = get_last_update_timestamp()
+    last_update_timestamp = get_last_update_timestamp()
 
-updates = get_updates(config['entity']['updated_by'], config['server'], token, last_update_timestamp, config['entity']['key'])
-print(updates)
+    updates = get_updates(config['entity']['updated_by'], config['server'], token, last_update_timestamp, config['entity']['key'])
+    print(updates)
 
-if updates is None:
-    raise SystemExit("No updates to process")
+    if updates is None:
+        print("No updates to process")
+        return 0
 
-entities = get_entities(config['server'], token, config['entity']['attached_to'][0], config['entity']['filename']).set_index('name')
-entities.update(updates.set_index(config['entity']['key']))
+    entities = get_entities(config['server'], token, config['entity']['attached_to'][0], config['entity']['filename']).set_index('name')
+    entities.update(updates.set_index(config['entity']['key']))
 
-csv = entities.to_csv()
-upload(config['server'], token, config['entity']['attached_to'], csv, config['entity']['filename'])
+    csv = entities.to_csv()
+    upload(config['server'], token, config['entity']['attached_to'], csv, config['entity']['filename'])
 
-latest_update_timestamp = isoparse(updates['submissionDate'].max()) + dt.timedelta(milliseconds=1)
-print(latest_update_timestamp)
+    latest_update_timestamp = isoparse(updates['submissionDate'].max()) + dt.timedelta(milliseconds=1)
+    print(latest_update_timestamp)
 
-write_to_cache("last_open", latest_update_timestamp.isoformat())
+    write_to_cache("last_open", latest_update_timestamp.isoformat())
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
