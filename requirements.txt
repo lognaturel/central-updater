@@ -4,3 +4,4 @@ requests~=2.20.0
 pandas~=1.4.0
 typing~=3.6.1
 mock~=4.0.3
+python-dateutil~=2.8.2

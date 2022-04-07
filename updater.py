@@ -11,23 +11,48 @@ from typing import Optional
 import pandas as pd
 from pandas import DataFrame
 
-
-def get_config():
-    with open('config.json') as config_file:
-        return json.load(config_file)
+CACHE = "cache.json"
+CONFIG = "config.json"
 
 
-def get_token(server: dict):
-    token = get_verified_cached_token(server) or get_new_token(server)
+def get_config(config_file: str):
+    with open(config_file) as file:
+        return json.load(file)
+
+
+def get_token(server: dict, cache_file: Optional[str] = None) -> str:
+    """Get a verified session token with the provided credential. First tries from cache if a cache file is provided,
+    then falls back to requesting a new session. Updates cache if provided.
+
+    Parameters:
+        server: dict with the following keys:
+            url: the base URL of the Central server to connect to
+            username: the username of the Web User to auth with
+            password: the Web User's password
+        cache_file (optional): a file for caching the session token. This is recommended to minimize the login events logged
+        on the server.
+
+    Returns:
+        Optional[str]: the session token or None if anything has gone wrong
+    """
+    token = get_verified_cached_token(server, cache_file) or get_new_token(server)
+
+    if cache_file is not None:
+        write_to_cache(cache_file, "token", token)
+
     if not token:
         raise SystemExit("Unable to get session token")
+
     return token
 
 
-def get_verified_cached_token(server: dict) -> Optional[str]:
+def get_verified_cached_token(server: dict, cache_file: Optional[str] = None) -> Optional[str]:
+    if cache_file is None:
+        return None
+
     try:
-        with open('cache.json') as cache_file:
-            cache = json.load(cache_file)
+        with open(cache_file) as cache:
+            cache = json.load(cache)
             token = cache["token"]
             # TODO: request updates with cached token to remove this request
             user_details_response = requests.get(
@@ -51,22 +76,23 @@ def get_new_token(server: dict) -> Optional[str]:
         return email_token_response.json()["token"]
 
 
-def write_to_cache(key: str, value: str):
+def write_to_cache(cache_file: str, key: str, value: str):
+    """Add the given key/value pair to the provided cache file, preserving any other properties it may have"""
     try:
-        with open('cache.json') as cache_file:
-            cache = json.load(cache_file)
+        with open(cache_file) as file:
+            cache = json.load(file)
             cache[key] = value
     except FileNotFoundError:
         cache = {key: value}
 
-    with open('cache.json', 'w') as outfile:
+    with open(cache_file, 'w') as outfile:
         json.dump(cache, outfile)
 
 
-def get_last_update_timestamp() -> str:
+def get_last_update_timestamp(cache_file: str) -> str:
     try:
-        with open('cache.json') as cache_file:
-            cache = json.load(cache_file)
+        with open(cache_file) as file:
+            cache = json.load(file)
             return cache["last_open"]
     except FileNotFoundError:
         print("no cache file")
@@ -125,12 +151,11 @@ def upload(server: dict, token: str, attached_to: list, csv: str, filename: str)
 
 
 def main() -> int:
-    config = get_config()
+    config = get_config(CONFIG)
 
-    token = get_token(config['server'])
-    write_to_cache("token", token)
+    token = get_token(config['server'], cache_file=CACHE)
 
-    last_update_timestamp = get_last_update_timestamp()
+    last_update_timestamp = get_last_update_timestamp(CACHE)
 
     updates = get_updates(config['entity']['updated_by'], config['server'], token, last_update_timestamp, config['entity']['key'])
     print(updates)
