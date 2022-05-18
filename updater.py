@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
+import io
 import sys
+from logging.handlers import RotatingFileHandler
 from urllib.parse import quote_plus
+import logging
 
 import requests
 import json
@@ -13,6 +16,19 @@ from pandas import DataFrame
 
 CACHE = "cache.json"
 CONFIG = "config.json"
+LOG = "updater.log"
+
+LOGGER = logging.getLogger("updater")
+
+
+def configure_logger(filename):
+    LOGGER.setLevel(logging.INFO)
+    handler = RotatingFileHandler(filename, maxBytes=5 * 1024 * 1024, backupCount=2)
+    formatter = logging.Formatter(fmt='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
+    handler.setFormatter(formatter)
+    LOGGER.addHandler(handler)
+
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
 
 
 def get_config(config_file: str):
@@ -62,7 +78,7 @@ def get_verified_cached_token(server: dict, cache_file: Optional[str] = None) ->
             if user_details_response.ok:
                 return token
     except (FileNotFoundError, KeyError):
-        print("cache file missing or has no token key")
+        LOGGER.info("cache file missing or has no token key")
 
 
 def get_new_token(server: dict) -> Optional[str]:
@@ -95,9 +111,9 @@ def get_last_update_timestamp(cache_file: str) -> str:
             cache = json.load(file)
             return cache["last_open"]
     except FileNotFoundError:
-        print("no cache file")
+        LOGGER.info("no cache file")
     except KeyError:
-        print("no last_open cache key")
+        LOGGER.info("no last_open cache key")
     return "1970-01-01T00:00:00Z"
 
 
@@ -129,7 +145,7 @@ def get_form_updates(server: dict, token: str, updated_by: dict, last_update_tim
         if len(response.json()['value']) == 0:
             return None
     except KeyError:
-        print(response.json())  # Something went wrong with the query
+        LOGGER.warning(response.json())  # Something went wrong with the query
         return None
 
     return pd.json_normalize(response.json()['value'], sep='/')[updated_by['fields'] + [key, '__system/submissionDate']]
@@ -151,6 +167,9 @@ def upload(server: dict, token: str, attached_to: list, csv: str, filename: str)
 
 
 def main() -> int:
+    configure_logger(LOG)
+    LOGGER.info("##### Running #####")
+
     config = get_config(CONFIG)
 
     token = get_token(config['server'], cache_file=CACHE)
@@ -158,11 +177,12 @@ def main() -> int:
     last_update_timestamp = get_last_update_timestamp(CACHE)
 
     updates = get_updates(config['entity']['updated_by'], config['server'], token, last_update_timestamp, config['entity']['key'])
-    print(updates)
 
     if updates is None:
-        print("No updates to process")
+        LOGGER.info("No updates")
         return 0
+
+    LOGGER.info(f"{updates.to_string(header=False)}")
 
     entities = get_entities(config['server'], token, config['entity']['attached_to'][0], config['entity']['filename']).set_index('name')
     entities.update(updates.set_index(config['entity']['key']))
@@ -171,7 +191,7 @@ def main() -> int:
     upload(config['server'], token, config['entity']['attached_to'], csv, config['entity']['filename'])
 
     latest_update_timestamp = isoparse(updates['submissionDate'].max()) + dt.timedelta(milliseconds=1)
-    print(latest_update_timestamp)
+    LOGGER.debug(latest_update_timestamp)
 
     write_to_cache(CACHE, "last_open", latest_update_timestamp.isoformat())
     return 0
