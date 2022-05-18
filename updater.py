@@ -136,10 +136,10 @@ def get_form_updates(server: dict, token: str, updated_by: dict, last_update_tim
 
 
 def get_entities(server: dict, token: str, form_id: str, filename: str) -> DataFrame:
-    return pd.read_csv(
-        f"{server['url']}/v1/projects/{server['project']}/forms/{form_id}/attachments/{filename}",
-        storage_options={"Authorization": f"Bearer {token}"}
-    )
+    res = requests.get(f"{server['url']}/v1/projects/{server['project']}/forms/{form_id}/attachments/{filename}",
+                       headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"}
+                       )
+    return pd.read_csv(io.BytesIO(res.content))
 
 
 def upload(server: dict, token: str, attached_to: list, csv: str, filename: str):
@@ -173,7 +173,7 @@ def main() -> int:
     latest_update_timestamp = isoparse(updates['submissionDate'].max()) + dt.timedelta(milliseconds=1)
     print(latest_update_timestamp)
 
-    write_to_cache("last_open", latest_update_timestamp.isoformat())
+    write_to_cache(CACHE, "last_open", latest_update_timestamp.isoformat())
     return 0
 
 
